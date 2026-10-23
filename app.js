@@ -6,7 +6,10 @@ const R_EARTH = 6371008.8;
 const MAX_ACC = 30;           // 이보다 부정확한 GPS 위치는 버림 (m)
 const STOP_SPEED = 0.05;      // 이보다 느리면 "거의 정지" (m/s ≈ 0.1 kn)
 
-const DEFAULTS = { windowSec: 40, offset: -8.5 };
+const FLOOR_K = 0.0171;       // 상관 오차 바닥값 = K × GPS 정확도(m) × (40/구간초)^P  (m/s)
+const FLOOR_P = 0.66;
+
+const DEFAULTS = { windowSec: 60, offset: -8.5 };
 const settings = loadSettings();
 
 const state = {
@@ -99,7 +102,13 @@ function estimateDrift() {
     const ex = r.x - X - vx * dt, ey = r.y - Y - vy * dt;
     Srr += r.w * (ex * ex + ey * ey);
   }
-  const se = Math.sqrt(Srr / (2 * (rows.length - 2)) / Stt);   // 축당 속도 표준오차 (m/s)
+  // 축당 속도 표준오차 (m/s). 잔차로 구한 값은 매초 오차가 독립이라고 가정해서, 실제 GPS처럼
+  // 오차가 수십 초 쏠리면 3~7배 작게 나온다. 시뮬레이션(tools/simulate_drift.py)으로 구한
+  // 상관 오차 바닥값을 더해 신뢰도가 후하게 나오지 않게 한다.
+  const seWhite = Math.sqrt(Srr / (2 * (rows.length - 2)) / Stt);
+  const accMean = pts.reduce((s, f) => s + Math.max(f.acc, 3), 0) / pts.length;
+  const floor = FLOOR_K * accMean * (40 / span) ** FLOOR_P;
+  const se = Math.hypot(seWhite, floor);
   const speed = Math.hypot(vx, vy);
   return { speed, bearing: norm360(Math.atan2(vx, vy) / DEG), se, n: rows.length, span };
 }

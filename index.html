@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="style.css?v=4">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
   <header class="chips">
@@ -65,7 +65,7 @@
       <p>GPS로 배가 흘러가는 방향과 속도를 재고, 휴대폰 나침반으로 <b>내가 바라보는 방향 기준</b>으로 보여줍니다.</p>
       <ul>
         <li>휴대폰을 바다 쪽(내 정면)으로 향하게 들고 보세요. 눕혀도, 세워도 됩니다.</li>
-        <li>정확한 값이 나오려면 20~40초 정도 걸립니다.</li>
+        <li>정확한 값이 나오려면 30초~1분 정도 걸립니다.</li>
         <li>위치·동작 센서 권한을 허용해 주세요.</li>
       </ul>
       <button id="btn-start" class="btn primary">시작</button>
@@ -82,8 +82,8 @@
       <label class="row">측정 구간
         <select id="set-window">
           <option value="20">20초 (빠름, 흔들림 큼)</option>
-          <option value="40">40초 (권장)</option>
-          <option value="60">60초</option>
+          <option value="40">40초</option>
+          <option value="60">60초 (권장)</option>
           <option value="90">90초 (안정적, 느림)</option>
         </select>
       </label>
@@ -116,6 +116,6 @@
   <div id="toast" class="toast" hidden></div>
 
   <!-- 파일을 고치면 ?v= 숫자와 sw.js의 CACHE 버전을 함께 올릴 것 -->
-  <script src="app.js?v=4"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>

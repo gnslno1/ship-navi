@@ -5,6 +5,7 @@ import kotlin.math.cos
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -14,6 +15,8 @@ private const val R_EARTH = 6371008.8
 private const val MAX_ACC = 30.0  // 이보다 부정확한 GPS 위치는 버림 (m)
 const val STOP_SPEED = 0.05       // 이보다 느리면 "거의 정지" (m/s ≈ 0.1 kn)
 private const val MAX_JUMP_SPEED = 30.0  // 이보다 빠른 위치 변화는 GPS 튐으로 본다 (m/s ≈ 58 kn)
+private const val FLOOR_K = 0.0171       // 상관 오차 바닥값 = K × GPS 정확도(m) × (40/구간초)^P  (m/s)
+private const val FLOOR_P = 0.66
 
 fun norm360(a: Double) = ((a % 360) + 360) % 360
 fun norm180(a: Double) = norm360(a).let { if (it > 180) it - 360 else it }
@@ -39,7 +42,7 @@ data class Drift(val speed: Double, val bearing: Double, val se: Double, val n: 
  * 휴대폰 웹앱(app.js estimateDrift)과 같은 계산.
  * 측정 구간의 GPS 위치들에 가중 최소제곱으로 직선을 맞춰 속도 벡터를 구한다.
  */
-class DriftEstimator(private val windowSec: Double = 40.0) {
+class DriftEstimator(private val windowSec: Double = 60.0) {
     private val fixes = ArrayDeque<Fix>()
 
     fun add(f: Fix) {
@@ -91,7 +94,12 @@ class DriftEstimator(private val windowSec: Double = 40.0) {
             val ey = y[i] - ym - vy * dt
             srr += w[i] * (ex * ex + ey * ey)
         }
-        val se = sqrt(srr / (2 * (n - 2)) / stt)
+        // 잔차로 구한 표준오차는 매초 오차가 독립이라고 가정해서 실제 GPS(오차가 수십 초 쏠림)에선 3~7배 작다.
+        // 시뮬레이션(tools/simulate_drift.py)으로 구한 상관 오차 바닥값을 더한다. 웹앱 app.js와 같은 식.
+        val seWhite = sqrt(srr / (2 * (n - 2)) / stt)
+        val accMean = pts.sumOf { max(it.acc, 3.0) } / n
+        val floor = FLOOR_K * accMean * (40 / span).pow(FLOOR_P)
+        val se = hypot(seWhite, floor)
         return Drift(hypot(vx, vy), norm360(atan2(vx, vy) / DEG), se, n, span)
     }
 
