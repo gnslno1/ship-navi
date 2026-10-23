@@ -111,10 +111,10 @@ private fun Dial(r: Readings) {
             rotate((d.bearing - heading).toFloat()) {
                 val len = rad * (0.45f + 0.35f * min(d.knots / 2, 1.0).toFloat())
                 val headLen = 12.dp.toPx()
+                val alpha = if (d.quality == "낮음") 0.35f else 1f
                 drawLine(
                     Amber, Offset(c.x, c.y + rad * 0.25f), Offset(c.x, c.y - len + headLen / 2),
-                    strokeWidth = 7.dp.toPx(), cap = StrokeCap.Round,
-                    alpha = if (d.quality == "낮음") 0.45f else 1f,
+                    strokeWidth = 7.dp.toPx(), cap = StrokeCap.Round, alpha = alpha,
                 )
                 drawPath(
                     Path().apply {
@@ -124,6 +124,7 @@ private fun Dial(r: Readings) {
                         close()
                     },
                     Amber,
+                    alpha = alpha,
                 )
             }
         }
@@ -134,16 +135,19 @@ private fun Dial(r: Readings) {
 @Composable
 private fun Summary(r: Readings) {
     val d = r.drift
+    // 신뢰도가 낮으면 숫자를 흐리게 해서 믿을 만한 값처럼 보이지 않게 한다 (정지 상태에서도 1kn 가까이 나올 수 있음)
+    val weak = d != null && d.quality == "낮음"
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(
             if (d == null) "-- kn" else String.format("%.1f kn", d.knots),
-            fontSize = 26.sp, fontWeight = FontWeight.Bold,
+            fontSize = 26.sp, fontWeight = FontWeight.Bold, color = if (weak) Muted else Color.White,
         )
         val (text, color) = when {
             !r.hasPermission -> "위치 권한이 필요해요" to Bad
             !r.gpsEnabled -> "워치 위치 기능이 꺼져 있어요" to Bad
             d == null -> "측정 중…" to Muted
             d.speed < STOP_SPEED -> "배가 거의 멈춰 있어요" to Muted
+            weak -> "흐름 불확실 · GPS 흔들림" to Muted
             r.heading == null -> "흐름 방위 ${d.bearing.roundToInt()}°" to Amber
             else -> {
                 val rel = norm180(d.bearing - r.heading)

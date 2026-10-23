@@ -256,6 +256,12 @@ def analyze(rows, force_stationary):
             stationary = stationary_test(fixes)
             if stationary:
                 findings += stationary["findings"]
+                # 앱이 실제로 보여준 판정(도플러 확인 포함)이 위치만 쓴 노이즈 분석보다 중요하다
+                if ratios:
+                    hi_mid = sum(1 for x in ratios if x >= 3) / len(ratios)
+                    findings.append(("good" if hi_mid < 0.05 else "bad",
+                                     f"정지 상태에서 앱이 '보통' 이상으로 잘못 표시한 시간: {hi_mid * 100:.1f}% "
+                                     "(도플러 속도 확인 포함, 5% 미만이면 정상)"))
     return table, findings, fixes, stationary
 
 
@@ -281,8 +287,9 @@ def stationary_test(fixes):
     if 0.67 <= ratio <= 1.5:
         findings.append(("good", f"정지 시험: 앱의 신뢰도 기준(FLOOR_K={FLOOR_K})이 이 기기 GPS와 잘 맞아요 (실측 {k_med:.4f})."))
     else:
-        findings.append(("warn", f"정지 시험: 이 기기 GPS 노이즈로 보면 FLOOR_K를 {FLOOR_K} → {k_med:.4f}로 바꾸는 게 맞아요 "
-                                 f"({'신뢰도가 후함' if ratio > 1 else '신뢰도가 박함'}). app.js와 Drift.kt의 값을 바꾸세요."))
+        findings.append(("warn", f"정지 시험: 위치만 보면 GPS 노이즈가 모형의 {ratio:.1f}배예요 (FLOOR_K 실측 {k_med:.4f}, 앱 {FLOOR_K}). "
+                                 "창가·실내·건물 옆이면 반사 때문에 원래 크게 나오니, 하늘이 트인 곳에서 다시 재서 비슷하면 "
+                                 "app.js와 Drift.kt의 FLOOR_K를 바꾸세요."))
     w60 = [r for r in res if r[0] == 60]
     if w60:
         findings.append(("info", f"가만히 있어도 60초 구간에서 흐름이 중앙값 {w60[0][5]:.2f}kn로 나와요. 이보다 느린 흐름은 방향을 믿기 어려워요."))

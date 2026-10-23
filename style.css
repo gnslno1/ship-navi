@@ -89,6 +89,7 @@ main {
 .speed small { font-size: 0.35em; font-weight: 600; margin-left: 6px; color: var(--muted); }
 .sub { color: var(--muted); font-size: 15px; margin-top: 4px; }
 .rel { font-size: clamp(20px, 6vw, 26px); font-weight: 700; color: var(--accent); margin-top: 10px; }
+.speed.weak, .rel.weak { color: var(--muted); }
 .hint { font-size: 15px; margin-top: 10px; line-height: 1.45; max-width: 440px; }
 
 .demo-ctrl { width: 100%; max-width: 440px; margin-top: 12px; color: var(--muted); font-size: 14px; }

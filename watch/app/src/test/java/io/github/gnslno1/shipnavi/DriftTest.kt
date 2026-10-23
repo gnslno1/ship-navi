@@ -148,8 +148,8 @@ class DriftTest {
     }
 
     /** 실기기 정지 기록 재생 → 측정 구간이 찬 뒤(60초 이후) 판정들 */
-    private fun replayBalcony(useDoppler: Boolean): List<Drift> {
-        val lines = javaClass.getResource("/stationary_balcony.csv")!!.readText().lines()
+    private fun replay(file: String, useDoppler: Boolean): List<Drift> {
+        val lines = javaClass.getResource(file)!!.readText().lines()
             .filter { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("t,") }
         val est = DriftEstimator(60.0)
         val out = mutableListOf<Drift>()
@@ -166,16 +166,22 @@ class DriftTest {
     @Test
     fun realStationaryWatchIsNotHighConfidenceWithDoppler() {
         // 위치만 쓰면 창가의 GPS 반사 때문에 가짜 흐름이 "높음"으로 나오던 실제 기록
-        val positionsOnly = replayBalcony(useDoppler = false)
+        val positionsOnly = replay("/stationary_balcony.csv", useDoppler = false)
         assertTrue("위치만으로는 높음이 나와야 이 데이터가 의미 있음", positionsOnly.any { it.quality == "높음" })
 
-        val withDoppler = replayBalcony(useDoppler = true)
-        assertTrue(withDoppler.size > 100)
-        val high = withDoppler.count { it.quality == "높음" }
-        val mid = withDoppler.count { it.quality == "보통" }
-        assertEquals("정지인데 높음", 0, high)
-        assertTrue("정지인데 보통 $mid/${withDoppler.size}", mid * 10 <= withDoppler.size)
-        assertTrue("표시 속도 최대 ${withDoppler.maxOf { it.knots }}kn", withDoppler.all { it.knots < 0.6 })
+        // 창문 열린 베란다 4분, 닫힌 창문 안쪽 30분 (자석 버클 제거)
+        for (file in listOf("/stationary_balcony.csv", "/stationary_window_30min.csv")) {
+            val withDoppler = replay(file, useDoppler = true)
+            assertTrue(withDoppler.size > 100)
+            val high = withDoppler.count { it.quality == "높음" }
+            val mid = withDoppler.count { it.quality == "보통" }
+            assertEquals("$file: 정지인데 높음", 0, high)
+            assertTrue("$file: 정지인데 보통 $mid/${withDoppler.size}", mid * 20 <= withDoppler.size)
+            // 창유리 반사로 도플러까지 흔들리면 가짜 속도가 1kn 가까이 나올 수 있다 → 대부분 "낮음"이어야 한다.
+            // 위치와 도플러가 같은 방향으로 함께 속는 순간(30분 중 약 2초)은 이 방식으로 못 잡으므로 1%까지 허용.
+            val fakeConfident = withDoppler.count { it.knots >= 0.5 && it.quality != "낮음" }
+            assertTrue("$file: 0.5kn 이상 가짜 흐름이 보통 이상 $fakeConfident/${withDoppler.size}", fakeConfident * 100 <= withDoppler.size)
+        }
     }
 
     @Test

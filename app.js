@@ -357,6 +357,8 @@ function updateText(hasCompass, d, q) {
   }
 
   if (!d || d.warming) {
+    $('spd').parentElement.classList.remove('weak');
+    $('rel').classList.remove('weak');
     setChip('quality', '', '측정 중');
     $('spd').textContent = '--';
     $('spd-sub').innerHTML = '&nbsp;';
@@ -366,6 +368,10 @@ function updateText(hasCompass, d, q) {
     return;
   }
 
+  // 신뢰도가 낮으면 숫자를 흐리게 해서 믿을 만한 값처럼 보이지 않게 한다 (정지 상태에서도 1kn 가까이 나올 수 있음)
+  const weak = q === 'low';
+  $('spd').parentElement.classList.toggle('weak', weak);
+  $('rel').classList.toggle('weak', weak);
   const kn = d.speed * KN;
   $('spd').textContent = kn < 10 ? kn.toFixed(1) : Math.round(kn);
   $('spd-sub').textContent = `분당 ${Math.round(d.speed * 60)}m · ${d.span.toFixed(0)}초 평균`;
@@ -381,6 +387,12 @@ function updateText(hasCompass, d, q) {
     q === 'good' ? '신뢰도 높음' : q === 'ok' ? '신뢰도 보통' : '신뢰도 낮음');
 
   const absText = `흐름 방위 ${dirName(d.bearing)} ${String(Math.round(d.bearing)).padStart(3, '0')}°`;
+  if (weak) {
+    $('rel').textContent = '흐름 불확실 · GPS 흔들림';
+    $('abs').textContent = `참고: ${absText}`;
+    $('hint').innerHTML = '방향을 믿기 어려워요. 하늘이 트인 곳에서 잠시 기다려 보세요.';
+    return;
+  }
   if (!hasCompass) {
     $('rel').textContent = absText;
     $('abs').textContent = '나침반이 없어 화면 위쪽 = 북쪽';
@@ -394,7 +406,7 @@ function updateText(hasCompass, d, q) {
   const side = a <= 10 ? '정면' : a >= 170 ? '뒤쪽' : `${rel > 0 ? '오른쪽' : '왼쪽'} ${a}°`;
   $('rel').textContent = `${clock}시 방향 · ${side}`;
   $('abs').textContent = absText;
-  $('hint').innerHTML = q === 'low' ? 'GPS 흔들림이 커서 방향이 부정확할 수 있어요' : hintFor(rel);
+  $('hint').innerHTML = hintFor(rel);
 }
 
 // ---------------------------------------------------------------- 기타
