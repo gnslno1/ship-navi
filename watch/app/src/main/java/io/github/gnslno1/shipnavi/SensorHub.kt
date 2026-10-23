@@ -164,7 +164,8 @@ class SensorHub(private val ctx: Context) : SensorEventListener, LocationListene
                     hc += 0.2 * (cos(h) - hc)
                 }
                 tilt = acos(rot[8].toDouble().coerceIn(-1.0, 1.0)) / DEG
-                headingAcc = if (e.values.size > 4 && e.values[4] >= 0) e.values[4] / DEG else null
+                // values[4]는 방위 오차(라디안)지만 기기마다 안 주거나 엉뚱한 값을 준다 (갤럭시 워치: 수천 °) → 0~180°만 쓴다
+                headingAcc = (if (e.values.size > 4) e.values[4] / DEG else null)?.takeIf { it in 0.0..180.0 }
             }
             Sensor.TYPE_MAGNETIC_FIELD -> {
                 magField = sqrt(e.values.sumOf { (it * it).toDouble() })

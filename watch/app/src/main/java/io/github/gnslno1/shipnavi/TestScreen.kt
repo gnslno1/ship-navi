@@ -179,7 +179,7 @@ private fun gpsSpeedLine(r: Readings): Pair<String, Color> {
 }
 
 private fun driftLine(r: Readings): Pair<String, Color> {
-    val d = r.drift ?: return "흐름(40초) 측정 중" to Muted
+    val d = r.drift ?: return "흐름 측정 중" to Muted
     return String.format("흐름 %.0f초 %.2fkn · %d° · %s", d.span, d.knots, d.bearing.roundToInt(), d.quality) to
         (if (d.quality == "낮음") Warn else Color.White)
 }
