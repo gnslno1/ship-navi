@@ -461,8 +461,77 @@ function diagText() {
   return lines.join('\n');
 }
 
+// README.md를 앱 안에서 보여주기 위한 작은 마크다운 변환기 (제목, 목록, 표, 굵게, 코드, 링크만)
+function renderMarkdown(src) {
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const link = (url, text) => `<a href="${url}" target="_blank" rel="noopener">${text}</a>`;
+  const inline = (s) => esc(s).replace(
+    /`([^`]+)`|\*\*(.+?)\*\*|\[([^\]]+)\]\((https?:[^)\s]+)\)|(https?:\/\/[^\s<)]+)/g,
+    (m, code, bold, text, url, bare) => code ? `<code>${code}</code>` : bold ? `<b>${bold}</b>` : text ? link(url, text) : link(bare, bare),
+  );
+
+  const out = [];
+  let list = null;   // 'ul' | 'ol'
+  let para = [];
+  const flushPara = () => { if (para.length) out.push(`<p>${inline(para.join(' '))}</p>`); para = []; };
+  const closeList = () => { if (list) out.push(`</li></${list}>`); list = null; };
+
+  const lines = src.replace(/\r/g, '').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let m;
+    if (!line.trim()) { flushPara(); closeList(); continue; }
+    if ((m = line.match(/^(#{1,3})\s+(.*)/))) {
+      flushPara(); closeList();
+      out.push(`<h${m[1].length}>${inline(m[2])}</h${m[1].length}>`);
+      continue;
+    }
+    if (line.startsWith('|')) {
+      flushPara(); closeList();
+      const rows = [];
+      while (i < lines.length && lines[i].startsWith('|')) rows.push(lines[i++]);
+      i--;
+      const cells = rows.filter((r) => !/^\|[\s:|-]+$/.test(r.trim()))
+        .map((r) => r.trim().replace(/^\||\|$/g, '').split('|').map((c) => inline(c.trim())));
+      const [head, ...body] = cells;
+      out.push('<table><tr>' + head.map((c) => `<th>${c}</th>`).join('') + '</tr>'
+        + body.map((r) => '<tr>' + r.map((c) => `<td>${c}</td>`).join('') + '</tr>').join('') + '</table>');
+      continue;
+    }
+    if ((m = line.match(/^\s*([-*]|\d+\.)\s+(.*)/))) {
+      flushPara();
+      const type = /\d/.test(m[1]) ? 'ol' : 'ul';
+      if (list !== type) { closeList(); out.push(`<${type}><li>`); list = type; }
+      else out.push('</li><li>');
+      out.push(inline(m[2]));
+      continue;
+    }
+    if (list && /^\s+\S/.test(line)) { out.push(' ' + inline(line.trim())); continue; }   // 목록 항목의 이어지는 줄
+    closeList();
+    para.push(line.trim());
+  }
+  flushPara(); closeList();
+  return out.join('\n');
+}
+
+async function showHelp() {
+  const dlg = $('help'), body = $('help-body');
+  dlg.showModal();
+  dlg.querySelector('.panel').scrollTop = 0;
+  if (body.dataset.loaded) return;
+  try {
+    const res = await fetch('README.md');
+    if (!res.ok) throw new Error(res.status);
+    body.innerHTML = renderMarkdown(await res.text());
+    body.dataset.loaded = '1';
+  } catch {
+    body.textContent = '설명서를 불러오지 못했어요. 인터넷에 연결된 상태에서 다시 열어 주세요.';
+  }
+}
+
 function initSettings() {
   const dlg = $('settings');
+  $('btn-help').onclick = showHelp;
   const open = () => {
     $('set-window').value = settings.windowSec;
     $('set-offset').value = settings.offset;

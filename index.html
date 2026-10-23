@@ -77,6 +77,8 @@
     <form method="dialog" class="panel">
       <h2>설정 · 보정</h2>
 
+      <button type="button" id="btn-help" class="btn">사용 설명서 보기</button>
+
       <label class="row">측정 구간
         <select id="set-window">
           <option value="20">20초 (빠름, 흔들림 큼)</option>
@@ -100,6 +102,13 @@
       <h3>센서 진단</h3>
       <pre id="diag" class="diag"></pre>
 
+      <button value="close" class="btn primary">닫기</button>
+    </form>
+  </dialog>
+
+  <dialog id="help">
+    <form method="dialog" class="panel">
+      <div id="help-body" class="md">불러오는 중…</div>
       <button value="close" class="btn primary">닫기</button>
     </form>
   </dialog>
