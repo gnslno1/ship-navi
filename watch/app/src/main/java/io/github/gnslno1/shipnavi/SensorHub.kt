@@ -143,7 +143,12 @@ class SensorHub(private val ctx: Context) : SensorEventListener, LocationListene
 
     override fun onLocationChanged(loc: Location) {
         lastLoc = loc
-        estimator.add(Fix(loc.elapsedRealtimeNanos / 1e9, loc.latitude, loc.longitude, loc.accuracy.toDouble()))
+        estimator.add(
+            Fix(
+                loc.elapsedRealtimeNanos / 1e9, loc.latitude, loc.longitude, loc.accuracy.toDouble(),
+                loc.takeIf { it.hasSpeed() }?.speed?.toDouble(),
+            ),
+        )
         drift = estimator.estimate()
         declination = GeomagneticField(
             loc.latitude.toFloat(), loc.longitude.toFloat(), loc.altitude.toFloat(), loc.time,

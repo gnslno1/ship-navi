@@ -61,7 +61,9 @@ function addFix(t, c) {
   if (c.accuracy > MAX_ACC) return;
   const fx = state.fixes;
   if (fx.length && t <= fx[fx.length - 1].t) return;   // 같은 위치 중복 수신
-  fx.push({ t, lat: c.latitude, lon: c.longitude, acc: c.accuracy });
+  // speed: GPS 칩이 도플러로 잰 순간 속도 (없거나 음수면 null)
+  const speed = Number.isFinite(c.speed) && c.speed >= 0 ? c.speed : null;
+  fx.push({ t, lat: c.latitude, lon: c.longitude, acc: c.accuracy, speed });
   while (t - fx[0].t > Math.max(settings.windowSec, 120)) fx.shift();
   state.drift = estimateDrift();
 }
@@ -108,8 +110,16 @@ function estimateDrift() {
   const seWhite = Math.sqrt(Srr / (2 * (rows.length - 2)) / Stt);
   const accMean = pts.reduce((s, f) => s + Math.max(f.acc, 3), 0) / pts.length;
   const floor = FLOOR_K * accMean * (40 / span) ** FLOOR_P;
-  const se = Math.hypot(seWhite, floor);
-  const speed = Math.hypot(vx, vy);
+
+  // 건물 옆·창가처럼 GPS가 반사되는 곳에선 위치가 수십 초에 ±15m씩 흘러 가짜 흐름이 생긴다(실기기 정지 기록).
+  // 도플러 속도는 위치 흔들림과 무관하게 정확하므로, 위치로 구한 속도가 도플러보다 빠르면
+  // 속도는 도플러 쪽으로 낮추고 그 차이만큼 오차를 키운다. 방향은 위치로 구한 값을 쓴다. (Drift.kt와 같은 식)
+  const posSpeed = Math.hypot(vx, vy);
+  const dops = pts.map((f) => f.speed).filter((s) => s != null);
+  const dop = dops.length * 2 >= pts.length ? dops.reduce((a, b) => a + b, 0) / dops.length : null;
+  const mismatch = dop != null ? Math.max(0, posSpeed - dop) : 0;
+  const se = Math.hypot(seWhite, floor, mismatch);
+  const speed = dop != null ? Math.min(posSpeed, dop) : posSpeed;
   return { speed, bearing: norm360(Math.atan2(vx, vy) / DEG), se, n: rows.length, span };
 }
 

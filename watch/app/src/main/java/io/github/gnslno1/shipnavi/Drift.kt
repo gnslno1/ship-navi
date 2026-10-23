@@ -24,7 +24,8 @@ fun norm180(a: Double) = norm360(a).let { if (it > 180) it - 360 else it }
 /** 내 정면 기준 상대 각도 → 시계 방향 (12시 = 정면) */
 fun clockOf(rel: Double) = ((norm360(rel) / 30).roundToInt() % 12).let { if (it == 0) 12 else it }
 
-data class Fix(val t: Double, val lat: Double, val lon: Double, val acc: Double)
+/** speed: GPS 칩이 도플러로 잰 순간 속도 (m/s, 없으면 null) */
+data class Fix(val t: Double, val lat: Double, val lon: Double, val acc: Double, val speed: Double? = null)
 
 /** speed m/s, bearing 진북 기준 °, se 축당 속도 표준오차 m/s, span 실제 평균 구간(초) */
 data class Drift(val speed: Double, val bearing: Double, val se: Double, val n: Int, val span: Double) {
@@ -99,8 +100,16 @@ class DriftEstimator(private val windowSec: Double = 60.0) {
         val seWhite = sqrt(srr / (2 * (n - 2)) / stt)
         val accMean = pts.sumOf { max(it.acc, 3.0) } / n
         val floor = FLOOR_K * accMean * (40 / span).pow(FLOOR_P)
-        val se = hypot(seWhite, floor)
-        return Drift(hypot(vx, vy), norm360(atan2(vx, vy) / DEG), se, n, span)
+
+        // 건물 옆·창가처럼 GPS가 반사되는 곳에선 위치가 수십 초에 ±15m씩 흘러 가짜 흐름이 생긴다(실기기 정지 기록).
+        // 도플러 속도는 위치 흔들림과 무관하게 정확하므로, 위치로 구한 속도가 도플러보다 빠르면
+        // 속도는 도플러 쪽으로 낮추고 그 차이만큼 오차를 키운다. 방향은 위치로 구한 값을 쓴다.
+        val posSpeed = hypot(vx, vy)
+        val dop = pts.mapNotNull { it.speed }.takeIf { it.size * 2 >= n }?.average()
+        val mismatch = if (dop != null) max(0.0, posSpeed - dop) else 0.0
+        val se = sqrt(seWhite * seWhite + floor * floor + mismatch * mismatch)
+        val speed = if (dop != null) min(posSpeed, dop) else posSpeed
+        return Drift(speed, norm360(atan2(vx, vy) / DEG), se, n, span)
     }
 
     private fun distance(a: Fix, b: Fix) = hypot(

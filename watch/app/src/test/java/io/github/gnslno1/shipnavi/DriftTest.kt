@@ -147,6 +147,57 @@ class DriftTest {
         assertTrue("높음 중 ±15° 안: ${(within * 100).toInt()}%", within >= 0.9)
     }
 
+    /** 실기기 정지 기록 재생 → 측정 구간이 찬 뒤(60초 이후) 판정들 */
+    private fun replayBalcony(useDoppler: Boolean): List<Drift> {
+        val lines = javaClass.getResource("/stationary_balcony.csv")!!.readText().lines()
+            .filter { it.isNotBlank() && !it.startsWith("#") && !it.startsWith("t,") }
+        val est = DriftEstimator(60.0)
+        val out = mutableListOf<Drift>()
+        for (line in lines) {
+            val c = line.split(",")
+            val t = c[0].toDouble()
+            val speed = c[4].toDoubleOrNull()?.takeIf { useDoppler }
+            est.add(fix(t, c[1].toDouble(), c[2].toDouble(), c[3].toDouble()).copy(speed = speed))
+            if (t >= 60) est.estimate()?.let { out += it }
+        }
+        return out
+    }
+
+    @Test
+    fun realStationaryWatchIsNotHighConfidenceWithDoppler() {
+        // 위치만 쓰면 창가의 GPS 반사 때문에 가짜 흐름이 "높음"으로 나오던 실제 기록
+        val positionsOnly = replayBalcony(useDoppler = false)
+        assertTrue("위치만으로는 높음이 나와야 이 데이터가 의미 있음", positionsOnly.any { it.quality == "높음" })
+
+        val withDoppler = replayBalcony(useDoppler = true)
+        assertTrue(withDoppler.size > 100)
+        val high = withDoppler.count { it.quality == "높음" }
+        val mid = withDoppler.count { it.quality == "보통" }
+        assertEquals("정지인데 높음", 0, high)
+        assertTrue("정지인데 보통 $mid/${withDoppler.size}", mid * 10 <= withDoppler.size)
+        assertTrue("표시 속도 최대 ${withDoppler.maxOf { it.knots }}kn", withDoppler.all { it.knots < 0.6 })
+    }
+
+    @Test
+    fun dopplerAgreesWhenReallyMoving() {
+        // 실제로 0.8kn로 움직이면 도플러도 0.8kn → 판정이 깎이지 않아야 한다
+        val rnd = Random(5)
+        val v = 0.8 / KN
+        var ok = 0
+        repeat(200) {
+            val est = DriftEstimator(60.0)
+            gpsNoise(rnd, 61).forEachIndexed { i, (ex, ey) ->
+                est.add(
+                    fix(i.toDouble(), v * sin(60 * DEG) * i + ex, v * cos(60 * DEG) * i + ey, 4.8)
+                        .copy(speed = v + rnd.nextGaussian() * 0.05),
+                )
+            }
+            val d = est.estimate()!!
+            if (d.quality != "낮음" && angleDiff(d.bearing, 60.0) <= 30) ok++
+        }
+        assertTrue("움직일 때 보통 이상 + ±30°: $ok/200", ok >= 170)
+    }
+
     @Test
     fun clockDirections() {
         assertEquals(12, clockOf(0.0))
