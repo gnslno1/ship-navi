@@ -27,6 +27,10 @@ const state = {
 };
 
 const $ = (id) => document.getElementById(id);
+
+// 휴대폰에는 개발자 도구가 없으니 오류를 화면에 띄운다.
+window.addEventListener('error', (e) => toast(`오류: ${e.message}`));
+window.addEventListener('unhandledrejection', (e) => toast(`오류: ${e.reason?.message || e.reason}`));
 const norm360 = (a) => ((a % 360) + 360) % 360;
 const norm180 = (a) => { a = norm360(a); return a > 180 ? a - 360 : a; };
 
@@ -514,8 +518,10 @@ function renderMarkdown(src) {
   return out.join('\n');
 }
 
+// 모달 위에 모달을 겹치지 않도록 설정 창을 닫고 연다. 설명서를 닫으면 설정 창으로 돌아간다.
 async function showHelp() {
   const dlg = $('help'), body = $('help-body');
+  $('settings').close();
   dlg.showModal();
   dlg.querySelector('.panel').scrollTop = 0;
   if (body.dataset.loaded) return;
@@ -541,6 +547,7 @@ function initSettings() {
   };
   $('btn-settings').onclick = open;
   $('chip-compass').onclick = open;
+  $('help').addEventListener('close', open);
   setInterval(() => { if (dlg.open) $('diag').textContent = diagText(); }, 500);
   $('set-window').onchange = (e) => {
     settings.windowSec = +e.target.value; saveSettings();
