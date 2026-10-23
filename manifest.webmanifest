@@ -1,0 +1,17 @@
+{
+  "name": "배 흐름 나침반",
+  "short_name": "배흐름",
+  "description": "배낚시용: 내가 바라보는 방향 기준으로 배가 흘러가는 방향과 속도를 표시",
+  "lang": "ko",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0b1620",
+  "theme_color": "#0b1620",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}

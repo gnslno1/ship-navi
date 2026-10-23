@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#0b1620">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>배 흐름 나침반</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="chips">
+    <span id="chip-gps" class="chip">GPS 대기</span>
+    <span id="chip-compass" class="chip">나침반 대기</span>
+    <span id="chip-quality" class="chip">측정 전</span>
+  </header>
+
+  <main>
+    <div class="dial-wrap">
+      <svg id="dial" viewBox="-170 -170 340 340" aria-label="배 흐름 방향 표시">
+        <!-- 고정: 내 기준 시계 방향 (12시 = 내 정면) -->
+        <g id="clock" class="clock"></g>
+        <polygon id="front-mark" class="front-mark" points="0,-168 -11,-148 11,-148"/>
+        <!-- 회전: 나침반 눈금 (실제 방위) -->
+        <g id="card">
+          <circle r="136" class="card-ring"/>
+          <g id="ticks"></g>
+        </g>
+        <!-- 흐름 화살표 (내 정면 기준 상대 방향) -->
+        <g id="arrow">
+          <path id="cone" class="cone" d=""/>
+          <line id="shaft" class="shaft" x1="0" y1="26" x2="0" y2="-70"/>
+          <polygon id="head" class="head" points="0,-88 -15,-62 15,-62"/>
+        </g>
+        <circle r="7" class="hub"/>
+      </svg>
+    </div>
+
+    <section class="readout">
+      <div class="speed"><span id="spd">--</span><small>kn</small></div>
+      <div id="spd-sub" class="sub">&nbsp;</div>
+      <div id="rel" class="rel">측정 중…</div>
+      <div id="abs" class="sub">&nbsp;</div>
+      <div id="hint" class="hint">&nbsp;</div>
+    </section>
+
+    <div id="demo-ctrl" class="demo-ctrl" hidden>
+      <label>가상 나침반 <span id="demo-h-val">0°</span>
+        <input id="demo-h" type="range" min="0" max="359" value="0">
+      </label>
+    </div>
+  </main>
+
+  <footer>
+    <button id="btn-settings" class="btn">설정 · 보정</button>
+  </footer>
+
+  <div id="start" class="overlay">
+    <div class="panel">
+      <h1>배 흐름 나침반</h1>
+      <p>GPS로 배가 흘러가는 방향과 속도를 재고, 휴대폰 나침반으로 <b>내가 바라보는 방향 기준</b>으로 보여줍니다.</p>
+      <ul>
+        <li>휴대폰을 바다 쪽(내 정면)으로 향하게 들고 보세요. 눕혀도, 세워도 됩니다.</li>
+        <li>정확한 값이 나오려면 20~40초 정도 걸립니다.</li>
+        <li>위치·동작 센서 권한을 허용해 주세요.</li>
+      </ul>
+      <button id="btn-start" class="btn primary">시작</button>
+      <p id="start-err" class="err"></p>
+    </div>
+  </div>
+
+  <dialog id="settings">
+    <form method="dialog" class="panel">
+      <h2>설정 · 보정</h2>
+
+      <label class="row">측정 구간
+        <select id="set-window">
+          <option value="20">20초 (빠름, 흔들림 큼)</option>
+          <option value="40">40초 (권장)</option>
+          <option value="60">60초</option>
+          <option value="90">90초 (안정적, 느림)</option>
+        </select>
+      </label>
+
+      <label class="row">나침반 보정값 (°)
+        <input id="set-offset" type="number" step="0.5" inputmode="decimal">
+      </label>
+      <p class="note">자북→진북 편차 + 배 철판 영향을 합친 값입니다. 한국 기본값 −8.5°.</p>
+
+      <button type="button" id="btn-calib" class="btn">뱃머리 방향으로 자동 보정</button>
+      <p class="note">배가 2노트 이상으로 <b>직진 중</b>일 때, 휴대폰을 뱃머리 쪽으로 향하고 누르세요. GPS 진행 방향에 맞춰 나침반을 맞춥니다.</p>
+      <button type="button" id="btn-reset" class="btn">보정값 초기화 (−8.5°)</button>
+
+      <label class="row check"><input id="set-demo" type="checkbox"> 데모 모드 (가상 GPS)</label>
+
+      <button value="close" class="btn primary">닫기</button>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
