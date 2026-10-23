@@ -17,7 +17,12 @@ const state = {
   hs: 0, hc: 0,       // 방위 스무딩용 sin/cos 누적값
   headingAt: 0,
   compassAcc: null,   // iOS 나침반 정확도 (°)
+  compassStart: 0,
+  permResult: null,   // DeviceOrientationEvent.requestPermission() 결과
+  src: null,          // 사용 중인 방위 소스 (SRC_NAMES 키)
   iosOff: null,       // iOS: 상대 alpha → 절대 방위 오프셋 (sin/cos)
+  relRaw: null,       // 상대 방향 소스의 마지막 값
+  relOff: null,       // 상대 방향 → 진북 오프셋 (자동 보정으로 설정)
   demo: false,
 };
 
@@ -115,33 +120,82 @@ function lookHeading(alpha, beta, gamma) {
   return norm360(Math.atan2(east, north) / DEG);
 }
 
+// 센서별 수신 상태 (설정 화면의 "센서 진단"에 표시)
+const sensors = {
+  aos: { name: 'AbsoluteOrientationSensor', n: 0 },
+  abs: { name: 'deviceorientationabsolute', n: 0 },
+  ori: { name: 'deviceorientation', n: 0 },
+};
+const perms = {};
+const SRC_NAMES = { aos: 'AbsoluteOrientationSensor', abs: '방향 이벤트 (절대 방위)', ios: 'iOS 나침반', rel: '방향 이벤트 (상대, 자북 없음)' };
+
 async function startCompass() {
   const DOE = window.DeviceOrientationEvent;
-  if (!DOE) { setChip('compass', 'bad', '나침반 없음'); return; }
-
-  if (typeof DOE.requestPermission === 'function') {
-    // iOS: 사용자 터치 안에서 권한 요청 필요
-    const res = await DOE.requestPermission().catch(() => 'denied');
-    if (res !== 'granted') { setChip('compass', 'bad', '나침반 권한 거부'); return; }
-    window.addEventListener('deviceorientation', onOrientIOS);
-  } else if ('ondeviceorientationabsolute' in window) {
-    window.addEventListener('deviceorientationabsolute', onOrientAbs);
-  } else {
-    window.addEventListener('deviceorientation', (e) => { if (e.absolute) onOrientAbs(e); });
+  if (DOE && typeof DOE.requestPermission === 'function') {
+    // iOS와 최신 Chrome: 사용자 터치 안에서 권한 요청. 거부돼도 다른 소스가 될 수 있으니 계속 진행.
+    state.permResult = await DOE.requestPermission().catch((e) => e.name);
   }
-  setTimeout(() => { if (state.heading === null) setChip('compass', 'bad', '나침반 없음'); }, 3000);
+  // 기기·브라우저마다 되는 방식이 달라서 전부 켜 두고, 절대 방위를 주는 소스를 골라 쓴다.
+  state.compassStart = performance.now();
+  startOrientationSensor();
+  window.addEventListener('deviceorientationabsolute', (e) => onOrient('abs', e));
+  window.addEventListener('deviceorientation', (e) => onOrient('ori', e));
+  queryPerms();
 }
 
-function onOrientAbs(e) {
+// Chrome(안드로이드)의 Generic Sensor API. 방향 이벤트가 안 올 때도 이쪽은 되는 기기가 있다.
+function startOrientationSensor() {
+  const s = sensors.aos;
+  if (!('AbsoluteOrientationSensor' in window)) { s.err = '미지원'; return; }
+  try {
+    const sensor = new AbsoluteOrientationSensor({ frequency: 30 });
+    sensor.addEventListener('reading', () => {
+      s.n++;
+      const [x, y, z, w] = sensor.quaternion;
+      // 기기 좌표의 (위쪽 + 뒷면) 벡터 (0, 1, -1)을 지구 좌표(동, 북, 위)로 회전 — lookHeading과 같은 방향
+      const east = 2 * (x * y - z * w) - 2 * (x * z + y * w);
+      const north = 1 - 2 * (x * x + z * z) - 2 * (y * z - x * w);
+      feed('aos', norm360(Math.atan2(east, north) / DEG));
+    });
+    sensor.addEventListener('error', (e) => { s.err = e.error.name; });
+    sensor.start();
+  } catch (e) { s.err = e.name; }
+}
+
+async function queryPerms() {
+  for (const name of ['accelerometer', 'gyroscope', 'magnetometer']) {
+    try { perms[name] = (await navigator.permissions.query({ name })).state; } catch { perms[name] = '확인 불가'; }
+  }
+}
+
+function onOrient(type, e) {
+  const s = sensors[type];
+  s.n++;
+  s.alpha = e.alpha;
+  s.absolute = e.absolute;
+  if (e.webkitCompassHeading != null) { onOrientIOS(e); return; }
   if (e.alpha == null) return;
-  pushHeading(lookHeading(e.alpha, e.beta, e.gamma));
+  feed(type === 'abs' || e.absolute ? 'abs' : 'rel', lookHeading(e.alpha, e.beta, e.gamma));
+}
+
+// 처음 값을 준 절대 방위 소스를 계속 쓴다. 상대 방향(rel)은 절대 소스가 없을 때만 쓰고,
+// 북쪽 기준을 모르므로 "뱃머리 방향으로 자동 보정"으로 relOff를 맞춰야 표시된다.
+function feed(src, h) {
+  const absolute = src !== 'rel';
+  if (!state.src || (state.src === 'rel' && absolute)) state.src = src;
+  if (state.src !== src) return;
+  if (absolute) pushTrue(h + settings.offset);
+  else {
+    state.relRaw = h;
+    if (state.relOff !== null) pushTrue(h + state.relOff);
+  }
 }
 
 // iOS는 alpha가 임의 기준이라, 휴대폰이 어느 정도 누워 있을 때 webkitCompassHeading(위쪽 모서리 방위)과
 // 비교해 오프셋을 학습한 뒤, 세워 들었을 때도 회전행렬로 방향을 계산한다.
 function onOrientIOS(e) {
   const wch = e.webkitCompassHeading;
-  if (wch == null || e.alpha == null) return;
+  if (e.alpha == null) return;
   state.compassAcc = e.webkitCompassAccuracy;
   if (Math.abs(e.beta) < 60) {
     const off = (wch + e.alpha) * DEG;
@@ -151,13 +205,13 @@ function onOrientIOS(e) {
       state.iosOff.c += 0.1 * (Math.cos(off) - state.iosOff.c);
     }
   }
-  if (!state.iosOff) { pushHeading(wch); return; }
+  if (!state.iosOff) { feed('ios', wch); return; }
   const off = Math.atan2(state.iosOff.s, state.iosOff.c) / DEG;
-  pushHeading(norm360(lookHeading(e.alpha, e.beta, e.gamma) + off));
+  feed('ios', norm360(lookHeading(e.alpha, e.beta, e.gamma) + off));
 }
 
-function pushHeading(magHeading) {
-  const h = norm360(magHeading + settings.offset) * DEG;
+function pushTrue(trueHeading) {
+  const h = norm360(trueHeading) * DEG;
   if (state.heading === null) { state.hs = Math.sin(h); state.hc = Math.cos(h); }
   else {
     state.hs += 0.2 * (Math.sin(h) - state.hs);
@@ -271,8 +325,12 @@ function updateText(hasCompass, d, q) {
     const acc = state.compassAcc;
     if (acc != null && (acc < 0 || acc > 25)) setChip('compass', 'warn', '나침반 보정 필요');
     else setChip('compass', 'good', `나침반 ${Math.round(state.heading)}°`);
+  } else if (state.src === 'rel') {
+    setChip('compass', 'warn', '나침반 보정 필요 · 눌러서 확인');
   } else if (state.heading !== null) {
     setChip('compass', 'bad', '나침반 끊김');
+  } else if (state.compassStart && performance.now() - state.compassStart > 3000) {
+    setChip('compass', 'bad', `${state.permResult === 'denied' ? '나침반 권한 거부' : '나침반 없음'} · 눌러서 확인`);
   }
 
   if (!d || d.warming) {
@@ -340,6 +398,12 @@ function calibrate() {
   if (lf && lf.speed > 1 && Number.isFinite(lf.heading)) course = lf.heading;
   else if (d && !d.warming && d.speed > 1) course = d.bearing;
   if (course === null) { toast('배가 2노트 이상으로 직진할 때 사용하세요'); return; }
+  if (state.src === 'rel' && state.relRaw !== null) {
+    state.relOff = norm360(course - state.relRaw);
+    state.heading = null;
+    toast('나침반 방향을 GPS 진행 방향에 맞췄어요');
+    return;
+  }
   if (state.heading === null) { toast('나침반 값이 없어요'); return; }
   settings.offset = Math.round(norm180(settings.offset + norm180(course - state.heading)) * 10) / 10;
   saveSettings();
@@ -369,20 +433,46 @@ function startDemo() {
     if (performance.now() - state.headingAt > 500 || state.demoHeading) {
       state.demoHeading = true;
       $('demo-ctrl').hidden = false;
-      pushHeading(+slider.value - settings.offset);
+      pushTrue(+slider.value);
     }
   }, 50);
   slider.addEventListener('input', () => { $('demo-h-val').textContent = slider.value + '°'; });
 }
 
+function diagText() {
+  const lines = [`사용 중: ${state.src ? SRC_NAMES[state.src] : '없음'}`];
+  for (const s of Object.values(sensors)) {
+    let l = `${s.name}: ${s.n}회`;
+    if (s.err) l += ` · ${s.err}`;
+    if (s.n) l += ` · alpha ${s.alpha == null ? '없음' : Math.round(s.alpha)} · absolute ${s.absolute}`;
+    lines.push(l);
+  }
+  lines.push('권한: ' + (Object.entries(perms).map(([k, v]) => `${k}=${v}`).join(', ') || '-'));
+  if (state.permResult) lines.push(`방향 권한 요청 결과: ${state.permResult}`);
+  if (state.permResult === 'denied' && !state.src) {
+    lines.push('', '→ 방향 권한이 거부됐어요. 사이트 설정에서 "동작 센서"(아이폰은 설정 → Safari → "동작 및 방향 접근")를 허용하고 새로고침하세요.');
+  } else if (!state.src && Object.values(perms).includes('denied')) {
+    lines.push('', '→ 동작 센서가 차단돼 있어요. Chrome 주소창 왼쪽 아이콘 → 권한(사이트 설정) → "동작 센서" 허용 후 새로고침하세요.');
+  } else if (!state.src) {
+    lines.push('', '→ 방향 값이 안 들어와요. Chrome 주소창 왼쪽 아이콘 → 권한(사이트 설정)에서 "동작 센서"가 허용인지 확인하고 새로고침하세요.');
+  } else if (state.src === 'rel') {
+    lines.push('', '→ 자북(나침반) 값 없이 회전만 감지돼요. 배가 직진할 때 위의 "뱃머리 방향으로 자동 보정"을 누르면 방향이 표시됩니다.');
+  }
+  return lines.join('\n');
+}
+
 function initSettings() {
   const dlg = $('settings');
-  $('btn-settings').onclick = () => {
+  const open = () => {
     $('set-window').value = settings.windowSec;
     $('set-offset').value = settings.offset;
     $('set-demo').checked = state.demo;
+    $('diag').textContent = diagText();
     dlg.showModal();
   };
+  $('btn-settings').onclick = open;
+  $('chip-compass').onclick = open;
+  setInterval(() => { if (dlg.open) $('diag').textContent = diagText(); }, 500);
   $('set-window').onchange = (e) => {
     settings.windowSec = +e.target.value; saveSettings();
     if (state.fixes.length) state.drift = estimateDrift();
