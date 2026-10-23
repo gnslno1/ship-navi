@@ -1,5 +1,5 @@
 // 바다 위에서 데이터가 끊겨도 열리도록 앱 파일을 캐시한다.
-const CACHE = 'shipnavi-v5';
+const CACHE = 'shipnavi-v6';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png', 'README.md'];
 
 self.addEventListener('install', (e) => {

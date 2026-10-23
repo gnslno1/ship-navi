@@ -339,11 +339,11 @@ function updateText(hasCompass, d, q) {
     if (acc != null && (acc < 0 || acc > 25)) setChip('compass', 'warn', '나침반 보정 필요');
     else setChip('compass', 'good', `나침반 ${Math.round(state.heading)}°`);
   } else if (state.src === 'rel') {
-    setChip('compass', 'warn', '나침반 보정 필요 · 눌러서 확인');
+    setChip('compass', 'warn', '나침반 보정 필요');
   } else if (state.heading !== null) {
     setChip('compass', 'bad', '나침반 끊김');
   } else if (state.compassStart && performance.now() - state.compassStart > 3000) {
-    setChip('compass', 'bad', `${state.permResult === 'denied' ? '나침반 권한 거부' : '나침반 없음'} · 눌러서 확인`);
+    setChip('compass', 'bad', `${state.permResult === 'denied' ? '나침반 권한 거부' : '나침반 없음'}`);
   }
 
   if (!d || d.warming) {
@@ -555,7 +555,6 @@ function initSettings() {
     dlg.showModal();
   };
   $('btn-settings').onclick = open;
-  $('chip-compass').onclick = open;
   $('help').addEventListener('close', open);
   setInterval(() => { if (dlg.open) $('diag').textContent = diagText(); }, 500);
   $('set-window').onchange = (e) => {
